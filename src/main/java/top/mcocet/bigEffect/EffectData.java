@@ -14,21 +14,65 @@ import java.util.List;
 
 public class EffectData {
     
-    private static final String EFFECT_KEY = "potion_effect";  // 不包含冒号，plugin的命名空间会自动添加
+    private static final String EFFECT_KEY = "potion_effects";  // 不包含冒号，plugin的命名空间会自动添加
     private static Plugin plugin;
+    
+    // 分隔符：效果之间用 ; 分隔，效果属性用 | 分隔
+    private static final String EFFECT_SEPARATOR = ";";
+    private static final String PROPERTY_SEPARATOR = "|";
     
     public static void init(Plugin pluginInstance) {
         plugin = pluginInstance;
     }
     
     /**
-     * 为物品绑定药水效果
+     * 为物品绑定单个药水效果（如果已有其他效果则追加）
      */
     public static ItemStack bindEffect(ItemStack item, PotionEffect effect) {
         if (item == null || item.getType() == Material.AIR) {
             return null;
         }
         
+        // 获取已有效果列表
+        List<PotionEffect> existingEffects = getBoundEffects(item);
+        if (existingEffects == null) {
+            existingEffects = new ArrayList<>();
+        }
+        
+        // 检查是否已存在同类型效果，存在则替换
+        existingEffects.removeIf(e -> e.getType().equals(effect.getType()));
+        existingEffects.add(effect);
+        
+        return saveEffectsToItem(item, existingEffects);
+    }
+    
+    /**
+     * 为物品批量绑定多个药水效果
+     */
+    public static ItemStack bindEffects(ItemStack item, List<PotionEffect> effects) {
+        if (item == null || item.getType() == Material.AIR || effects == null || effects.isEmpty()) {
+            return null;
+        }
+        
+        // 获取已有效果列表
+        List<PotionEffect> existingEffects = getBoundEffects(item);
+        if (existingEffects == null) {
+            existingEffects = new ArrayList<>();
+        }
+        
+        // 添加新效果（同类型替换）
+        for (PotionEffect newEffect : effects) {
+            existingEffects.removeIf(e -> e.getType().equals(newEffect.getType()));
+            existingEffects.add(newEffect);
+        }
+        
+        return saveEffectsToItem(item, existingEffects);
+    }
+    
+    /**
+     * 将效果列表保存到物品
+     */
+    private static ItemStack saveEffectsToItem(ItemStack item, List<PotionEffect> effects) {
         ItemMeta meta = item.getItemMeta();
         if (meta == null) {
             return null;
@@ -36,27 +80,64 @@ public class EffectData {
         
         NamespacedKey key = new NamespacedKey(plugin, EFFECT_KEY);
         
-        // 存储药水效果类型和持续时间、等级（使用 | 作为分隔符，避免与 NamespacedKey 的冒号冲突）
-        String effectDataString = effect.getType().getKey().toString() + "|" + 
-                                 effect.getDuration() + "|" + 
-                                 effect.getAmplifier();
+        // 构建效果数据字符串：type|duration|amplifier;type|duration|amplifier;...
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < effects.size(); i++) {
+            PotionEffect effect = effects.get(i);
+            sb.append(effect.getType().getKey().toString())
+              .append(PROPERTY_SEPARATOR)
+              .append(effect.getDuration())
+              .append(PROPERTY_SEPARATOR)
+              .append(effect.getAmplifier());
+            
+            if (i < effects.size() - 1) {
+                sb.append(EFFECT_SEPARATOR);
+            }
+        }
         
-        meta.getPersistentDataContainer().set(key, PersistentDataType.STRING, effectDataString);
+        meta.getPersistentDataContainer().set(key, PersistentDataType.STRING, sb.toString());
         
-        // 添加Lore标识
-        List<String> lore = meta.hasLore() ? meta.getLore() : new ArrayList<>();
-        lore.add(" "); // 空行分隔
-        lore.add("§7§o绑定效果: " + getEffectDisplayName(effect.getType()) + " " + getEffectRomanLevel(effect.getAmplifier()));
-        meta.setLore(lore);
+        // 更新Lore标识
+        updateEffectLore(meta, effects);
         
         item.setItemMeta(meta);
         return item;
     }
     
     /**
-     * 从物品中获取绑定的药水效果
+     * 更新物品的效果Lore
+     */
+    private static void updateEffectLore(ItemMeta meta, List<PotionEffect> effects) {
+        List<String> lore = meta.hasLore() ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
+        
+        // 移除旧的效果Lore（以"绑定效果:"开头的行）
+        lore.removeIf(line -> line.contains("绑定效果:"));
+        lore.removeIf(String::isEmpty);
+        lore.removeIf(line -> line.trim().isEmpty());
+        
+        // 添加新的效果Lore
+        if (!effects.isEmpty()) {
+            lore.add(""); // 空行分隔
+            for (PotionEffect effect : effects) {
+                lore.add("§7§o绑定效果: " + getEffectDisplayName(effect.getType()) + " " + getEffectRomanLevel(effect.getAmplifier()));
+            }
+        }
+        
+        meta.setLore(lore);
+    }
+    
+    /**
+     * 从物品中获取单个绑定的药水效果（兼容旧版本，返回第一个效果）
      */
     public static PotionEffect getBoundEffect(ItemStack item) {
+        List<PotionEffect> effects = getBoundEffects(item);
+        return (effects != null && !effects.isEmpty()) ? effects.get(0) : null;
+    }
+    
+    /**
+     * 从物品中获取所有绑定的药水效果列表
+     */
+    public static List<PotionEffect> getBoundEffects(ItemStack item) {
         if (item == null || !item.hasItemMeta()) {
             return null;
         }
@@ -69,35 +150,42 @@ public class EffectData {
         }
 
         String effectDataString = meta.getPersistentDataContainer().get(key, PersistentDataType.STRING);
-        if (effectDataString == null) {
+        if (effectDataString == null || effectDataString.isEmpty()) {
             return null;
         }
 
+        List<PotionEffect> effects = new ArrayList<>();
         try {
-            String[] parts = effectDataString.split("\\|");
-            if (parts.length != 3) {
-                return null;
-            }
+            // 按 ; 分割多个效果
+            String[] effectStrings = effectDataString.split("\\" + EFFECT_SEPARATOR);
+            
+            for (String effectStr : effectStrings) {
+                String[] parts = effectStr.split("\\" + PROPERTY_SEPARATOR);
+                if (parts.length != 3) {
+                    continue;
+                }
 
-            PotionEffectType type = PotionEffectType.getByKey(NamespacedKey.fromString(parts[0]));
-            int duration = Integer.parseInt(parts[1]);
-            int amplifier = Integer.parseInt(parts[2]);
+                PotionEffectType type = PotionEffectType.getByKey(NamespacedKey.fromString(parts[0]));
+                int duration = Integer.parseInt(parts[1]);
+                int amplifier = Integer.parseInt(parts[2]);
 
-            if (type != null) {
-                return new PotionEffect(type, duration, amplifier, false, false, true);
+                if (type != null) {
+                    effects.add(new PotionEffect(type, duration, amplifier, false, false, true));
+                }
             }
         } catch (Exception e) {
             plugin.getLogger().warning("[EffectData] 解析绑定效果数据失败: " + e.getMessage());
         }
 
-        return null;
+        return effects.isEmpty() ? null : effects;
     }
     
     /**
      * 检查物品是否绑定了药水效果
      */
     public static boolean hasBoundEffect(ItemStack item) {
-        return getBoundEffect(item) != null;
+        List<PotionEffect> effects = getBoundEffects(item);
+        return effects != null && !effects.isEmpty();
     }
     
     /**

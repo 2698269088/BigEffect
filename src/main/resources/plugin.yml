@@ -1,5 +1,5 @@
 name: BigEffect
-version: '1.0'
+version: '1.1'
 main: top.mcocet.bigEffect.BigEffect
 api-version: '1.21'
 authors: [ MCOCET ]
@@ -12,6 +12,11 @@ commands:
     description: 为手持物品绑定药水效果
     usage: /bindEffect <药水效果名称> [等级]
     permission: bigeffect.bind
+    permission-message: §c你没有权限执行此命令!
+  bigEffect:
+    description: BigEffect 插件主命令
+    usage: /bigEffect reload
+    permission: bigeffect.admin
     permission-message: §c你没有权限执行此命令!
 
 permissions:

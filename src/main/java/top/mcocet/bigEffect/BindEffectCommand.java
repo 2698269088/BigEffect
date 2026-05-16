@@ -71,17 +71,26 @@ public class BindEffectCommand implements CommandExecutor {
             }
         }
         
-        // 创建药水效果(持续时间为10秒 = 200 ticks)
-        int duration = 200; // 10秒
+        // 使用配置文件中的持续时间
+        int duration = ConfigManager.getEffectDurationTicks();
         PotionEffect effect = new PotionEffect(effectType, duration, amplifier, false, false, true);
         
-        // 绑定效果到物品
+        // 绑定效果到物品（会追加到现有绑定效果中）
         ItemStack boundItem = EffectData.bindEffect(item, effect);
         
         if (boundItem != null) {
             player.getInventory().setItemInMainHand(boundItem);
             player.sendMessage("§a成功为物品绑定效果: §f" + getEffectDisplayName(effectType));
-            player.sendMessage("§a等级: §f" + (amplifier + 1) + " §a持续时间: §f10秒");
+            player.sendMessage("§a等级: §f" + (amplifier + 1) + " §a持续时间: §f" + ConfigManager.getEffectDurationSeconds() + "秒");
+            
+            // 显示当前物品的所有绑定效果
+            java.util.List<PotionEffect> allEffects = EffectData.getBoundEffects(boundItem);
+            if (allEffects != null && allEffects.size() > 1) {
+                player.sendMessage("§e当前物品共绑定 §f" + allEffects.size() + " §e个效果:");
+                for (PotionEffect e : allEffects) {
+                    player.sendMessage("  §7- " + getEffectDisplayName(e.getType()) + " " + getEffectRomanLevel(e.getAmplifier()));
+                }
+            }
         } else {
             player.sendMessage("§c绑定失败!");
         }
@@ -134,6 +143,20 @@ public class BindEffectCommand implements CommandExecutor {
             case "oozing": return "渗浆";
             case "infested": return "寄生";
             default: return name;
+        }
+    }
+    
+    /**
+     * 获取药水效果的等级(罗马数字)
+     */
+    private String getEffectRomanLevel(int amplifier) {
+        switch (amplifier) {
+            case 0: return "I";
+            case 1: return "II";
+            case 2: return "III";
+            case 3: return "IV";
+            case 4: return "V";
+            default: return String.valueOf(amplifier + 1);
         }
     }
 }

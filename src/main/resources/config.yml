@@ -1,0 +1,15 @@
+# BigEffect 配置文件
+
+# 药水效果持续时间（ticks）
+# 1 tick = 0.05 秒，200 ticks = 10 秒
+effect_duration_ticks: 200
+
+# 刷新检查间隔（ticks）
+# 每多少 ticks 检查一次玩家物品栏
+# 100 ticks = 5 秒
+refresh_interval_ticks: 100
+
+# 刷新阈值（ticks）
+# 当效果剩余时间小于此值时进行刷新
+# 160 ticks = 8 秒
+refresh_threshold_ticks: 160
