@@ -1,0 +1,20 @@
+name: BigEffect
+version: '1.0'
+main: top.mcocet.bigEffect.BigEffect
+api-version: '1.21'
+authors: [ MCOCET ]
+description: 给物品绑定药水效果，手持即可激活
+website: https://home.mcocet.top
+folia-supported: true
+
+commands:
+  bindEffect:
+    description: 为手持物品绑定药水效果
+    usage: /bindEffect <药水效果名称> [等级]
+    permission: bigeffect.bind
+    permission-message: §c你没有权限执行此命令!
+
+permissions:
+  bigeffect.bind:
+    description: 允许绑定药水效果到物品
+    default: op
